@@ -259,12 +259,41 @@ func TestBuildSelector(t *testing.T) {
 				hasSelector("[resource extra groups]"),
 			),
 		},
+
+		{
+			name: "komu",
+			mq:   mustNewQuery(`sum(increase(nginx_ingress_controller_response_size_sum{exported_namespace=<<index .LabelValuesByName "exported_namespace">>,exported_service=<<index .LabelValuesByName "exported_service">>}[<<index .LabelValuesByName "interval">>]))`, false),
+			metricSelector: func() labels.Selector {
+				en, err := labels.NewRequirement("exported_namespace", selection.In, []string{"casting-crowns"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				es, err := labels.NewRequirement("exported_service", selection.In, []string{"some-svc"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				interval, err := labels.NewRequirement("interval", selection.Equals, []string{"12h"})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				sel := labels.NewSelector().Add(*en, *es, *interval)
+
+				return sel
+			}(),
+			resource: schema.GroupResource{Group: "group", Resource: "resource"},
+			names:    []string{"bar", "foo"},
+			check: checks(
+				hasError(nil),
+				hasSelector("sum(increase(nginx_ingress_controller_response_size_sum{exported_namespace=casting-crowns,exported_service=some-svc}[12h]))"),
+			),
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			selector, err := tc.mq.Build(tc.series, tc.resource, tc.namespace, tc.extraGroupBy, tc.metricSelector, tc.names...)
 
+			selector, err := tc.mq.Build(tc.series, tc.resource, tc.namespace, tc.extraGroupBy, tc.metricSelector, tc.names...)
 			if err := tc.check(selector, err); err != nil {
 				t.Error(err)
 			}
